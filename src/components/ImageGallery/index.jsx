@@ -1,101 +1,118 @@
-import PropTypes from 'prop-types';
-import { toast } from 'react-toastify';
-import { Component } from 'react';
-import Button from 'components/Button';
-import Loader from 'components/Loader';
 import ImageGalleryItem from 'components/ImageGalleryItem';
-import { Gallery } from './ImageGallery.styled';
-import { getImagesBySearchQuery } from '../../services/pixabayAPI';
+import React, { Component } from 'react';
+import { getPixabayPictures } from 'services/pixabayAPI';
+import css from './ImageGallery.module.css';
+import Button from 'components/Button';
+import { Rings } from 'react-loader-spinner';
 
 export default class ImageGallery extends Component {
   state = {
     images: [],
+    pages: null,
+    page: 1,
+    perPage: 12,
     isLoading: false,
-    currentPage: 1,
-    error: null,
+    isVisibleModal: false,
+    error: false,
+    status: 'idle',
   };
 
-  static propTypes = {
-    searchValue: PropTypes.string.isRequired,
-    toggleModal: PropTypes.func.isRequired,
-  };
+  componentDidUpdate = (prevProps, prevState) => {
+    const { perPage } = this.state;
 
-  componentDidUpdate(prevProps, prevState) {
-    if (prevProps.searchValue !== this.props.searchValue) {
-      this.setState(
-        { images: [], isLoading: true, currentPage: 1 },
-        this.fetchImages
-      );
-    }
-  }
+    if (prevProps.searchQuery !== this.props.searchQuery) {
+      this.setState({ isLoading: true, status: 'pending', page: 1 });
 
-  onLoadMoreClick = () => {
-    this.setState(
-      prevState => ({
-        isLoading: true,
-        currentPage: prevState.currentPage + 1,
-      }),
-      this.fetchImages
-    );
-  };
+      getPixabayPictures(this.props.searchQuery, 1, perPage)
+        .then(({ data, status }) => {
+          if (data.totalHits === 0) {
+            this.setState({ status: 'rejected' });
+            return;
+          }
+          let pages = Math.ceil(data.totalHits / perPage);
 
-  fetchImages = async () => {
-    const { currentPage } = this.state;
-    const { searchValue } = this.props;
-
-    try {
-      const newImages = await getImagesBySearchQuery(searchValue, currentPage);
-
-      if (!newImages) {
-        return toast.error('Sorry... There are no such images', {
-          autoClose: 2500,
-          pauseOnHover: false,
-        });
-      }
-
-      this.setState(prevState => ({
-        images: [...prevState.images, ...newImages.hits],
-        imagesLoading: true,
-      }));
-
-      if (newImages.hits.length < 12) this.setState({ imagesLoading: false });
-    } catch (error) {
-      this.errorResponse(error);
-    } finally {
-      this.setState({ isLoading: false });
+          this.setState({
+            images: [...data.hits],
+            pages,
+            isLoading: false,
+            status: 'resolved',
+          });
+        })
+        .catch(error => this.setState({ error, status: 'rejected' }));
     }
   };
 
-  errorResponse = error => {
-    this.setState({ error: error.message }, () => {
-      toast.error(`Sorry... There was an error: ${this.state.error}`, {
-        autoClose: 2500,
-        pauseOnHover: false,
-      });
-    });
+  handleClick = () => {
+    const { page, perPage } = this.state;
+    const { searchQuery } = this.props;
+    const nextPage = page + 1;
+
+    getPixabayPictures(searchQuery, nextPage, perPage)
+      .then(({ data }) => {
+        this.setState(prevState => ({
+          images: [...prevState.images, ...data.hits],
+          page: nextPage,
+          status: 'resolved',
+        }));
+      })
+      .catch(error => this.setState({ error, status: 'rejected' }));
   };
 
   render() {
-    const { images, isLoading } = this.state;
+    const { images, page, pages, isLoading, status } = this.state;
 
-    return (
-      <>
-        <Gallery>
-          {images.map(image => (
-            <ImageGalleryItem
-              key={image.id}
-              smallImg={image.webformatURL}
-              largeImg={image.largeImageURL}
-              tags={image.tags}
-              toggleModal={() => this.props.toggleModal(image.largeImageURL)}
-            />
-          ))}
-        </Gallery>
+    switch (status) {
+      case 'idle':
+        return;
 
-        {isLoading && <Loader />}
+      case 'resolved':
+        return (
+          <>
+            <ul className={css.ImageGallery}>
+              {images.map(({ id, webformatURL, largeImageURL }) => {
+                return (
+                  <ImageGalleryItem
+                    key={id}
+                    webformatURL={webformatURL}
+                    largeImageURL={largeImageURL}
+                    onClick={this.handleOpenModal}
+                  ></ImageGalleryItem>
+                );
+              })}
+            </ul>
+            {pages > page && <Button onClick={this.handleClick} />}
+            {pages === page && (
+              <h1>
+                We're sorry, but you've reached the end of search results.
+              </h1>
+            )}
+          </>
+        );
 
-        {images.length > 0 && <Button onClick={this.onLoadMoreClick} />}
-      </>
-    );
+      case 'pending':
+        return (
+          <Rings
+            height="200"
+            width="200"
+            color="#4fa94d"
+            radius="6"
+            wrapperStyle={{}}
+            wrapperClass={css.Loader}
+            visible={isLoading}
+            ariaLabel="rings-loading"
+          />
+        );
+
+      case 'rejected':
+        return (
+          <h1>
+            Sorry, there are no images matching your search query. Please try
+            again.
+          </h1>
+        );
+
+      default:
+        break;
+    }
   }
 }
