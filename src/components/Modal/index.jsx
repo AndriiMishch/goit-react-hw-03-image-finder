@@ -1,53 +1,35 @@
-import PropTypes from 'prop-types';
-import { createPortal } from 'react-dom';
-import { Component } from 'react';
-import { ModalWindow, Overlay, ModalImg } from './Modal.styled';
+import css from './Modal.module.css';
 
-const modalRoot = document.querySelector('#modal-root');
+import React, { Component } from 'react';
 
 export default class Modal extends Component {
-  static propTypes = {
-    toggleModal: PropTypes.func.isRequired,
-    img: PropTypes.string.isRequired,
+  state = {};
+
+  componentDidMount = () => {
+    window.addEventListener('keydown', this.handlePressEscape);
   };
 
-  componentDidMount() {
-    document.addEventListener('keydown', this.escapeHandlePress);
-  }
-
-  componentWillUnmount() {
-    document.removeEventListener('keydown', this.escapeHandlePress);
-  }
-
-  overlayHandleClick = evt => {
-    const { toggleModal } = this.props;
-
-    if (evt.target === evt.currentTarget) {
-      toggleModal();
-    }
+  componentWillUnmount = () => {
+    window.removeEventListener('keydown', this.handlePressEscape);
   };
 
-  escapeHandlePress = evt => {
-    const { toggleModal } = this.props;
-
-    if (evt.code === 'Escape') {
-      toggleModal();
-    }
+  handlePressEscape = e => {
+    if (e.code === 'Escape') this.props.closeModal();
   };
 
   render() {
-    const { img } = this.props;
-
+    const { largeImageURL } = this.props;
     return (
       <>
-        {createPortal(
-          <Overlay onClick={this.overlayHandleClick}>
-            <ModalWindow>
-              <ModalImg src={img} />
-            </ModalWindow>
-          </Overlay>,
-          modalRoot
-        )}
+        <div className={css.Overlay} onClick={this.props.closeModal}>
+          <div className={css.Modal}>
+            <img
+              src={largeImageURL}
+              alt={largeImageURL}
+              className={css.Image}
+            />
+          </div>
+        </div>
       </>
     );
   }
